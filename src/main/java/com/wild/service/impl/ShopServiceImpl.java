@@ -11,6 +11,7 @@ import com.wild.entity.Shop;
 import com.wild.mapper.ShopMapper;
 import com.wild.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.wild.utils.CacheClient;
 import com.wild.utils.RedisData;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -49,7 +50,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     private BloomFilter<String> bloomFilter;
     private final ReentrantLock lock = new ReentrantLock();
 
-    private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);
+    @Resource
+    private CacheClient cacheClient;
     @PostConstruct
     public void initBloomFilter(){
         log.debug("布隆过滤器开始初始化....");
@@ -70,76 +72,25 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     }
     @Override
     public Result queryShopById(Long id) {
-        // 互斥锁缓存击穿
-        Shop shop = queryWithLogicalExpire(id);
-        if(shop == null){
-            return Result.fail("店铺不存在");
-        }else{
-            // 返回商铺信息
-            return Result.ok(shop);
-        }
-    }
-    public Shop queryWithLogicalExpire(Long id) {
-        // 使用布隆过滤器进行初步判断
-        // 如果布隆过滤器判断不存在，直接返回不存在的结果
-        if (!bloomFilter.mightContain(id.toString())) {
-            // 如果布隆过滤器判断不存在，直接返回不存在的结果
-            return null;
-        }
-        // 1.获取商铺Id
-        String shopKey = CACHE_SHOP_KEY + id;
-        // 2.根据商铺Id从Redis中查询缓存
-        String shopJson = stringRedisTemplate.opsForValue().get(shopKey);
-        // 3.判断是否命中
-        if(StrUtil.isBlank(shopJson)){
-            // 3.1 没有命中
-            return null;
-        }
-        // 4. 命中
-        RedisData redisData = JSONUtil.toBean(shopJson, RedisData.class);
-        Shop shop = JSONUtil.toBean((JSONObject) redisData.getData(), Shop.class);
-        LocalDateTime expireTime = redisData.getExpireTime();
-        // 5.判断是否过期
-        if(expireTime.isAfter(LocalDateTime.now())){
-            // 5.1 未过期，返回商铺信息
-            return shop;
-        }
-        // 5.2 已过期，需要缓存重建
-        // 6 换成重建
-        // 6.1 获取互斥锁
-        String lockKey = LOCK_SHOP_KEY + id;
-        boolean isLock = tryLock(lockKey);
-        // 6.2.判断是否获取锁成功
-        if (isLock){
-            CACHE_REBUILD_EXECUTOR.submit( ()->{
+        // 解决缓存穿透
+        Shop shop = cacheClient
+                .queryWithPassThrough(CACHE_SHOP_KEY, id, Shop.class, this::getById, CACHE_SHOP_TTL, TimeUnit.MINUTES);
 
-                try{
-                    //重建缓存
-                    this.saveShop2Redis(id,20L);
-                }catch (Exception e){
-                    throw new RuntimeException(e);
-                }finally {
-                    unLock(lockKey);
-                }
-            });
+        // 互斥锁解决缓存击穿
+        // Shop shop = cacheClient
+        //         .queryWithMutex(CACHE_SHOP_KEY, id, Shop.class, this::getById, CACHE_SHOP_TTL, TimeUnit.MINUTES);
+
+        // 逻辑过期解决缓存击穿
+        // Shop shop = cacheClient
+        //         .queryWithLogicalExpire(CACHE_SHOP_KEY, id, Shop.class, this::getById, 20L, TimeUnit.SECONDS);
+
+        if (shop == null) {
+            return Result.fail("店铺不存在！");
         }
-        // 7.返回商铺信息
-        return shop;
+        // 7.返回
+        return Result.ok(shop);
     }
-    public void saveShop2Redis(Long id,Long expireSeconds){
-        Shop shop = shopMapper.queryShopById(id);
-        RedisData redisData = new RedisData();
-        redisData.setData(shop);
-        redisData.setExpireTime(LocalDateTime.now());
-        stringRedisTemplate.opsForValue().set(CACHE_SHOP_KEY+id,JSONUtil.toJsonStr(redisData));
-    }
-    private boolean tryLock(String key){
-        Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", LOCK_SHOP_TTL, TimeUnit.SECONDS);
-        return BooleanUtil.isTrue(flag);
-    }
-    private void unLock(String key){
-        stringRedisTemplate.delete(key);
-    }
+
     @Override
     public Result update(Shop shop) {
         Long shopId = shop.getId();
