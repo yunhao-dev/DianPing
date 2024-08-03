@@ -18,6 +18,7 @@ import javax.annotation.Resource;
 
 import java.nio.charset.Charset;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -62,6 +63,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     }
     @Override
     public Result queryShopById(Long id) {
+        // 随机值解决缓存雪崩
+        long ttl = CACHE_SHOP_TTL + ThreadLocalRandom.current().nextInt(-5, 6);
         // 使用布隆过滤器进行初步判断
         if (!bloomFilter.mightContain(id.toString())) {
             // 如果布隆过滤器判断不存在，直接返回不存在的结果
@@ -87,7 +90,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         }
 
         // 6.存在，将商铺数据写入Redis
-        stringRedisTemplate.opsForValue().set(shopKey,JSONUtil.toJsonStr(shop),CACHE_SHOP_TTL, TimeUnit.MINUTES);
+        stringRedisTemplate.opsForValue().set(shopKey,JSONUtil.toJsonStr(shop),ttl, TimeUnit.MINUTES);
         // 7.返回商铺信息
         return Result.ok(shop);
     }
