@@ -1,5 +1,6 @@
 package com.wild.service.impl;
 
+import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.google.common.hash.BloomFilter;
@@ -22,8 +23,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static com.wild.utils.RedisConstants.CACHE_SHOP_KEY;
-import static com.wild.utils.RedisConstants.CACHE_SHOP_TTL;
+import static com.wild.utils.RedisConstants.*;
 
 /**
  * <p>
@@ -63,38 +63,74 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
     }
     @Override
     public Result queryShopById(Long id) {
+        // 互斥锁缓存击穿
+        Shop shop = queryWithMutex(id);
+        if(shop == null){
+            return Result.fail("店铺不存在");
+        }else{
+            // 返回商铺信息
+            return Result.ok(shop);
+        }
+    }
+    public Shop queryWithMutex(Long id) {
         // 随机值解决缓存雪崩
         long ttl = CACHE_SHOP_TTL + ThreadLocalRandom.current().nextInt(-5, 6);
         // 使用布隆过滤器进行初步判断
+        // 如果布隆过滤器判断不存在，直接返回不存在的结果
         if (!bloomFilter.mightContain(id.toString())) {
             // 如果布隆过滤器判断不存在，直接返回不存在的结果
-            return Result.fail("商铺不存在！");
+            return null;
         }
         // 1.获取商铺Id
         String shopKey = CACHE_SHOP_KEY + id;
         // 2.根据商铺Id从Redis中查询缓存
         String shopJson = stringRedisTemplate.opsForValue().get(shopKey);
-
+        if("null".equals(shopJson)){
+            return null;
+        }
         // 3.判断是否命中
         if(StrUtil.isNotBlank(shopJson)){
             // 3.1 命中
             Shop shop = JSONUtil.toBean(shopJson, Shop.class);
-            return Result.ok(shop);
+            return shop;
         }
-        // 4.没有命中，根据Id查询数据库
-        Shop shop = shopMapper.queryShopById(id);
-        // 5.判断商铺是否存在
-        if(shop == null){
-            // 5.1.不存在，返回404
-            return Result.fail("商铺不存在！");
+        // 4.实现缓存重构
+        // 4.1 获取互斥锁
+        String lockey = LOCK_SHOP_KEY + id;
+        Shop shop = null;
+        try {
+            boolean isLock = tryLock(lockey);
+            // 4.2 判断是否获取成功
+            if(!isLock){
+                // 4.3 失败，则休眠重试
+                return queryWithMutex(id);
+            }
+            // 4.4 成功，根据id查询数据库
+            shop = shopMapper.queryShopById(id);
+            // 5.判断商铺是否存在
+            if(shop == null){
+                // 5.1.不存在，返回404
+                stringRedisTemplate.opsForValue().set(shopKey,"null",CACHE_NULL_TTL, TimeUnit.MINUTES);
+                return null;
+            }
+            // 6.存在，将商铺数据写入Redis
+            stringRedisTemplate.opsForValue().set(shopKey,JSONUtil.toJsonStr(shop),ttl, TimeUnit.MINUTES);
+        }catch (Exception e){
+            throw new RuntimeException(e);
+        }finally {
+            // 7. 释放锁
+            unLock(lockey);
         }
-
-        // 6.存在，将商铺数据写入Redis
-        stringRedisTemplate.opsForValue().set(shopKey,JSONUtil.toJsonStr(shop),ttl, TimeUnit.MINUTES);
         // 7.返回商铺信息
-        return Result.ok(shop);
+        return shop;
     }
-
+    private boolean tryLock(String key){
+        Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", LOCK_SHOP_TTL, TimeUnit.SECONDS);
+        return BooleanUtil.isTrue(flag);
+    }
+    private void unLock(String key){
+        stringRedisTemplate.delete(key);
+    }
     @Override
     public Result update(Shop shop) {
         Long shopId = shop.getId();
