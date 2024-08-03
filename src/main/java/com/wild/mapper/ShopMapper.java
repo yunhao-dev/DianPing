@@ -23,6 +23,7 @@ public interface ShopMapper extends BaseMapper<Shop> {
      */
     Shop queryShopById(Long id);
 
+
     /**
      * 查询所有商铺Id
      * @return
