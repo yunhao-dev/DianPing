@@ -1,7 +1,8 @@
 package com.wild.service;
 
-import com.wild.entity.VoucherOrder;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.wild.dto.Result;
+import com.wild.entity.VoucherOrder;
 
 /**
  * <p>
@@ -13,4 +14,6 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IVoucherOrderService extends IService<VoucherOrder> {
 
+
+    Result seckillVoucher(Long voucherId);
 }
