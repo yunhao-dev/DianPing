@@ -1,16 +1,19 @@
 package com.wild.service.impl;
 
+
 import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
+
 import com.wild.dto.Result;
 import com.wild.entity.Shop;
 import com.wild.mapper.ShopMapper;
 import com.wild.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+
 import com.wild.utils.CacheClient;
 import com.wild.utils.RedisData;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -30,6 +33,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.wild.utils.RedisConstants.*;
+
 
 /**
  * <p>
@@ -88,6 +92,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             return Result.fail("店铺不存在！");
         }
         // 7.返回
+
         return Result.ok(shop);
     }
 
@@ -103,6 +108,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         stringRedisTemplate.delete(CACHE_SHOP_KEY+shopId);
         return Result.ok();
     }
+
 
     @Override
     public Result saveShop(Shop shop) {
@@ -121,4 +127,5 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             lock.unlock();
         }
     }
+
 }
