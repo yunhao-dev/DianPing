@@ -2,6 +2,7 @@ package com.wild.mapper;
 
 import com.wild.entity.SeckillVoucher;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Select;
 
 /**
  * <p>
@@ -13,4 +14,6 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
  */
 public interface SeckillVoucherMapper extends BaseMapper<SeckillVoucher> {
 
+    @Select("select * from tb_seckill_voucher where voucher_id=#{voucherId}")
+    SeckillVoucher queryById(Long voucherId);
 }

@@ -2,9 +2,10 @@ package com.wild.service.impl;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wild.dto.Result;
-import com.wild.entity.Voucher;
-import com.wild.mapper.VoucherMapper;
 import com.wild.entity.SeckillVoucher;
+import com.wild.entity.Voucher;
+import com.wild.mapper.SeckillVoucherMapper;
+import com.wild.mapper.VoucherMapper;
 import com.wild.service.ISeckillVoucherService;
 import com.wild.service.IVoucherService;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -35,11 +36,19 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> impl
 
     @Resource
     private VoucherMapper voucherMapper;
+    @Resource
+    private SeckillVoucherMapper seckillVoucherMapper;
 
     @Override
     public Result queryVoucherOfShop(Long shopId) {
         // 查询优惠券信息
         List<Voucher> vouchers = voucherMapper.queryAllById(shopId);
+        for (Voucher voucher : vouchers) {
+            SeckillVoucher seckillVoucher = seckillVoucherMapper.queryById(voucher.getId());
+            voucher.setStock(seckillVoucher.getStock());
+            voucher.setBeginTime(seckillVoucher.getBeginTime());
+            voucher.setEndTime(seckillVoucher.getEndTime());
+        }
         // 返回结果
         return Result.ok(vouchers);
     }
