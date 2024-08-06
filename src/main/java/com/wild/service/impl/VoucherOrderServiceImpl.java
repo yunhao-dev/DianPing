@@ -7,9 +7,10 @@ import com.wild.entity.VoucherOrder;
 import com.wild.mapper.VoucherOrderMapper;
 import com.wild.service.ISeckillVoucherService;
 import com.wild.service.IVoucherOrderService;
-import com.wild.utils.SimpleRedisLock;
 import com.wild.utils.SnowflakeIdWorker;
 import com.wild.utils.UserHolder;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +34,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private ISeckillVoucherService seckillVoucherService;
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private RedissonClient redissonClient;
     @Override
     public Result seckillVoucher(Long voucherId) {
         // 1.查询优惠券
@@ -56,8 +59,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         // 5.1.用户id
         Long userId = UserHolder.getUser().getId();
         // 创建锁对象
-        SimpleRedisLock lock = new SimpleRedisLock("order" + userId, stringRedisTemplate);
-        boolean isLock = lock.tryLock(1200);
+        RLock lock = redissonClient.getLock("lock:order:" + userId);
+        boolean isLock = lock.tryLock();
         //加锁失败
         if (!isLock) {
             return Result.fail("不允许重复下单");
