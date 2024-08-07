@@ -30,6 +30,7 @@ public class SimpleRedisLock implements ILock{
     }
     @Override
     public boolean tryLock(long timeoutSec) {
+
         // 获取线程Id
         String threadId = ID_PREFIX+String.valueOf(Thread.currentThread().getId());
         // 获取锁
