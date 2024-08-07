@@ -1,5 +1,6 @@
 package com.wild.service;
 
+import com.wild.dto.Result;
 import com.wild.entity.Blog;
 import com.baomidou.mybatisplus.extension.service.IService;
 
@@ -13,4 +14,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IBlogService extends IService<Blog> {
 
+    Result likeBlog(Long id);
+
+    Result queryBlogLikes(Long id);
 }
