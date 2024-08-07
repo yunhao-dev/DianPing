@@ -3,6 +3,9 @@ server:
 spring:
   application:
     name: dp
+  aop:
+    proxy-target-class: true
+    expose-proxy: true
   datasource:
     driver-class-name: com.mysql.jdbc.Driver
     url: jdbc:mysql://192.168.133.100:3306/dp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
