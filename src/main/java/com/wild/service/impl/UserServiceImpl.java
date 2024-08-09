@@ -8,10 +8,15 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wild.dto.LoginFormDTO;
 import com.wild.dto.Result;
 import com.wild.dto.UserDTO;
+import com.wild.entity.Blog;
+import com.wild.entity.Follow;
 import com.wild.entity.User;
+import com.wild.mapper.FollowMapper;
 import com.wild.mapper.UserMapper;
+import com.wild.service.IBlogService;
 import com.wild.service.IUserService;
 import com.wild.utils.RegexUtils;
+import com.wild.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -20,6 +25,7 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -42,6 +48,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private UserMapper userMapper;
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private IBlogService blogService;
+    @Resource
+    private FollowMapper followMapper;
     @Override
     public Result sendCode(String phone, HttpSession session) {
         // 1.校验手机号
@@ -101,5 +111,27 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         // 7.4 设置token有效期
         stringRedisTemplate.expire(tokenKey,LOGIN_USER_TTL,TimeUnit.MINUTES);
         return Result.ok(token);
+    }
+
+    @Override
+    public Result saveBlog(Blog blog) {
+        // 获取登录用户
+        UserDTO user = UserHolder.getUser();
+        blog.setUserId(user.getId());
+        // 保存探店博文
+        blogService.save(blog);
+        // 3.查询笔记作者的所有粉丝 select * from tb_follow where follow_user_id = ?
+
+        List<Follow> follows =  followMapper.queryAllFans(user.getId());
+        // 4.推送笔记id给所有粉丝
+        for (Follow follow : follows) {
+            // 4.1. 获取粉丝Id
+            Long userId = follow.getUserId();
+            // 4.2. 推送
+            String key = FEED_KEY + userId;
+            stringRedisTemplate.opsForZSet().add(key,blog.getId().toString(),System.currentTimeMillis());
+        }
+        // 返回id
+        return Result.ok(blog.getId());
     }
 }
