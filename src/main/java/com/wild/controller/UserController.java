@@ -1,9 +1,11 @@
 package com.wild.controller;
 
 
+import cn.hutool.core.bean.BeanUtil;
 import com.wild.dto.LoginFormDTO;
 import com.wild.dto.Result;
 import com.wild.dto.UserDTO;
+import com.wild.entity.User;
 import com.wild.entity.UserInfo;
 import com.wild.service.IUserInfoService;
 import com.wild.service.IUserService;
@@ -81,5 +83,16 @@ public class UserController {
         info.setUpdateTime(null);
         // 返回
         return Result.ok(info);
+    }
+    @GetMapping("/{id}")
+    public Result queryUserById(@PathVariable("id") Long userId){
+        // 查询详情
+        User user = userService.getById(userId);
+        if (user == null) {
+            return Result.ok();
+        }
+        UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
+        // 返回
+        return Result.ok(userDTO);
     }
 }
