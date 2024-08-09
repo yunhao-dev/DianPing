@@ -2,6 +2,7 @@ package com.wild.mapper;
 
 import com.wild.entity.Follow;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Select;
 
 /**
  * <p>
@@ -13,4 +14,6 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
  */
 public interface FollowMapper extends BaseMapper<Follow> {
 
+    @Select("select count(*) from tb_follow where user_id=#{userId} and follow_user_id=#{followUserId}")
+    Integer queryFollowCounts(Long userId, Long followUserId);
 }
