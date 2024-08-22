@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.wild.dto.LoginFormDTO;
 import com.wild.dto.Result;
@@ -18,6 +19,8 @@ import com.wild.service.IUserService;
 import com.wild.utils.RegexUtils;
 import com.wild.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -54,21 +57,34 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
     private IBlogService blogService;
     @Resource
     private FollowMapper followMapper;
+    @Resource
+    private RedissonClient redisson;
     @Override
     public Result sendCode(String phone, HttpSession session) {
-        // 1.校验手机号
-        if(RegexUtils.isPhoneInvalid(phone)) {
-            // 2.如果不符合，返回错误信息
-            return Result.fail("手机号格式错误");
+        RLock lock = redisson.getLock(LOCK_CODE_KEY + phone);
+        try {
+            lock.lock();
+            // 1.校验手机号
+            if(RegexUtils.isPhoneInvalid(phone)) {
+                // 2.如果不符合，返回错误信息
+                return Result.fail("手机号格式错误");
+            }
+            String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
+            if(StrUtil.isNotBlank(cacheCode)){
+                return Result.fail("请勿频繁发送验证码");
+            }
+            // 3.符合，生成验证码
+            String code = RandomUtil.randomNumbers(6);
+            // 4.保存验证码到redis
+            stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY+phone,code,LOGIN_CODE_TTL, TimeUnit.MINUTES);
+            // 5.发送验证码
+            log.debug("发送短信验证码成功，验证码：{}",code);
+            // 6.返回
+            return Result.ok();
+        }finally {
+            lock.unlock();
         }
-        // 3.符合，生成验证码
-        String code = RandomUtil.randomNumbers(6);
-        // 4.保存验证码到redis
-        stringRedisTemplate.opsForValue().set(LOGIN_CODE_KEY+phone,code,LOGIN_CODE_TTL, TimeUnit.MINUTES);
-        // 5.发送验证码
-        log.debug("发送短信验证码成功，验证码：{}",code);
-        // 6.返回
-        return Result.ok();
+
     }
 
     @Override
